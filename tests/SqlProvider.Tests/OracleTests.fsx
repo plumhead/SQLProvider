@@ -4,7 +4,7 @@ open System
 open FSharp.Data.Sql
 
 [<Literal>]
-let connStr = "Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=ORACLE)(PORT=1521)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=XE)));User Id=HR;Password=password;"
+let connStr = "Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=ORACLE)(PORT=1521)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=XE)));User Id=HR_TEST;Password=password;"
 
 [<Literal>]
 let resolutionFolder = @"D:\Appdev\SqlProvider\tests\SqlProvider.Tests"
@@ -12,7 +12,7 @@ FSharp.Data.Sql.Common.QueryEvents.SqlQueryEvent |> Event.add (printfn "Executin
 
 let processId = System.Diagnostics.Process.GetCurrentProcess().Id;
 
-type HR = SqlDataProvider<ConnectionString = connStr, DatabaseVendor = Common.DatabaseProviderTypes.ORACLE, ResolutionPath = resolutionFolder, Owner = "HR">
+type HR = SqlDataProvider<Common.DatabaseProviderTypes.ORACLE, connStr, ResolutionPath = resolutionFolder, Owner = "HR_TEST">
 let ctx = HR.GetDataContext()
 
 type Employee = {
@@ -23,7 +23,7 @@ type Employee = {
 }
 
 //***************** Individuals ***********************//
-let indv = ctx.``[HR].[EMPLOYEES]``.Individuals.``As FIRST_NAME``.``100, Steven``
+let indv = ctx.``[HR_TEST].[EMPLOYEES]``.Individuals.``As FIRST_NAME``.``100, Steven``
 
 indv.FIRST_NAME + " " + indv.LAST_NAME + " " + indv.EMAIL
 
@@ -31,7 +31,7 @@ indv.FIRST_NAME + " " + indv.LAST_NAME + " " + indv.EMAIL
 //*************** QUERY ************************//
 let employeesFirstName = 
     query {
-        for emp in ctx.``[HR].[EMPLOYEES]`` do
+        for emp in ctx.``[HR_TEST].[EMPLOYEES]`` do
         select (emp.FIRST_NAME, emp.LAST_NAME)
     } |> Seq.toList
 
@@ -123,15 +123,15 @@ ctx.SubmitUpdates()
 
 //********************** Procedures **************************//
 
-ctx.Procedures.ADD_JOB_HISTORY(100M, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60M)
+ctx.Procedures.ADD_JOB_HISTORY.Invoke(100M, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60M)
 
 //Support for sprocs with no parameters
-ctx.Procedures.SECURE_DML()
+ctx.Procedures.SECURE_DML.Invoke()
 
 //Support for sprocs that return ref cursors
 let employees =
     [
-      for e in ctx.Procedures.GET_EMPLOYEES().CATCUR do
+      for e in ctx.Procedures.GET_EMPLOYEES.Invoke().CATCUR do
         yield e.MapTo<Employee>()
     ]
 
@@ -143,7 +143,7 @@ type Region = {
 
 //Support for MARS procs
 let locations_and_regions =
-    let results = ctx.Procedures.GET_LOCATIONS_AND_REGIONS()
+    let results = ctx.Procedures.GET_LOCATIONS_AND_REGIONS.Invoke()
     [
       for e in results.LOCATIONS do
         yield e.ColumnValues |> Seq.toList |> box
@@ -155,7 +155,7 @@ let locations_and_regions =
 
 //Support for sprocs that return ref cursors and has in parameters
 let getemployees hireDate =
-    let results = (ctx.Procedures.GET_EMPLOYEES_STARTING_AFTER hireDate)
+    let results = (ctx.Procedures.GET_EMPLOYEES_STARTING_AFTER.Invoke hireDate)
     [
       for e in results.RESULTS do
         yield e.MapTo<Employee>()
@@ -165,12 +165,12 @@ getemployees (new System.DateTime(1999,4,1))
 
 //********************** Functions ***************************//
 
-let fullName = ctx.Functions.EMP_FULLNAME(100M).ReturnValue
+let fullName = ctx.Functions.EMP_FULLNAME.Invoke(100M).ReturnValue
 
 //********************** Packaged Procs **********************//
 
-ctx.Packages.TEST_PACKAGE.INSERT_JOB_HISTORY(100M, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60M)
+ctx.Packages.TEST_PACKAGE.INSERT_JOB_HISTORY.Invoke(100M, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60M)
 
 //********************** Packaged Funcs **********************//
 
-let fullNamPkg = ctx.Packages.TEST_PACKAGE.FULLNAME("Bull", "Colin").ReturnValue
+let fullNamPkg = ctx.Packages.TEST_PACKAGE.FULLNAME.Invoke("Bull", "Colin").ReturnValue

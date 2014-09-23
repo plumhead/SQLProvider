@@ -10,8 +10,6 @@ open Microsoft.FSharp.Core.CompilerServices
 open Microsoft.FSharp.Quotations
 open Samples.FSharp.ProvidedTypes
 open FSharp.Data.Sql.Schema
-   
-
 
 type internal SqlRuntimeInfo (config : TypeProviderConfig) =
     let runtimeAssembly = Assembly.LoadFrom(config.RuntimeAssembly)    
@@ -24,10 +22,10 @@ type SqlTypeProvider(config: TypeProviderConfig) as this =
     let ns = "FSharp.Data.Sql";   
     let asm = Assembly.GetExecutingAssembly()
      
-    let createTypes(conString, conStringName,dbVendor,resolutionPath,individualsAmount,useOptionTypes,owner, rootTypeName) =       
+    let createTypes(connnectionString, conStringName,dbVendor,resolutionPath,individualsAmount,useOptionTypes,owner, rootTypeName) =       
         let prov = ProviderBuilder.createProvider dbVendor resolutionPath config.ReferencedAssemblies owner
         let conString = 
-            match ConfigHelpers.tryGetConnectionString config.ResolutionFolder conStringName conString with
+            match ConfigHelpers.tryGetConnectionString false config.ResolutionFolder conStringName connnectionString with
             | Some(cs) -> cs
             | None -> failwithf "No connection string specified or could not find a connection string with name %s" conStringName
         let con = prov.CreateConnection conString
@@ -385,8 +383,13 @@ type SqlTypeProvider(config: TypeProviderConfig) as this =
             [ let meth = 
                 ProvidedMethod ("GetDataContext", [],
                                 serviceType, IsStaticMethod=true,
-                                InvokeCode = (fun _ -> 
-                                    <@@ SqlDataContext(rootTypeName,conString,dbVendor,resolutionPath,%%referencedAssemblyExpr,owner) :> ISqlDataContext @@>))
+                                InvokeCode = (fun _ ->
+                                    let runtimePath = config.ResolutionFolder
+                                    let runtimeConStr = 
+                                        <@@ match ConfigHelpers.tryGetConnectionString true runtimePath conStringName connnectionString with
+                                            | Some(cs) -> cs
+                                            | None -> failwithf "No connection string specified or could not find a connection string with name %s" conStringName @@>
+                                    <@@ SqlDataContext(rootTypeName,%%runtimeConStr,dbVendor,resolutionPath,%%referencedAssemblyExpr,owner) :> ISqlDataContext @@>))
 
               meth.AddXmlDoc "<summary>Returns an instance of the SQL Provider using the static parameters</summary>"
                    
@@ -432,10 +435,10 @@ type SqlTypeProvider(config: TypeProviderConfig) as this =
                     <param name='ResolutionPath'>The location to look for dynamically loaded assemblies containing database vendor specific connections and custom types.</param>
                     <param name='Owner'>The owner of the schema for this provider to resolve (Oracle Only)</param>"
         
-    do paramSqlType.DefineStaticParameters([conString;connStringName;dbVendor;resolutionPath;individualsAmount;optionTypes;owner], fun typeName args -> 
-        createTypes(args.[0] :?> string,                  // ConnectionString URL
-                    args.[1] :?> string,                  // ConnectionString Name
-                    args.[2] :?> DatabaseProviderTypes,   // db vendor
+    do paramSqlType.DefineStaticParameters([dbVendor;conString;connStringName;resolutionPath;individualsAmount;optionTypes;owner], fun typeName args -> 
+        createTypes(args.[1] :?> string,                  // ConnectionString URL
+                    args.[2] :?> string,                  // ConnectionString Name
+                    args.[0] :?> DatabaseProviderTypes,   // db vendor
                     args.[3] :?> string,                  // Assembly resolution path for db connectors and custom types
                     args.[4] :?> int,                     // Individuals Amount
                     args.[5] :?> bool,                    // Use option types?

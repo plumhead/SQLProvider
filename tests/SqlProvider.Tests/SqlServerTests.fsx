@@ -11,7 +11,7 @@ FSharp.Data.Sql.Common.QueryEvents.SqlQueryEvent |> Event.add (printfn "Executin
 
 let processId = System.Diagnostics.Process.GetCurrentProcess().Id;
 
-type HR = SqlDataProvider<ConnectionString = connStr, DatabaseVendor = Common.DatabaseProviderTypes.MSSQLSERVER, ResolutionPath = resolutionFolder>
+type HR = SqlDataProvider<Common.DatabaseProviderTypes.MSSQLSERVER, connStr, ResolutionPath = resolutionFolder>
 let ctx = HR.GetDataContext()
 
 type Employee = {
@@ -32,8 +32,32 @@ indv.FIRST_NAME + " " + indv.LAST_NAME + " " + indv.EMAIL
 let employeesFirstName = 
     query {
         for emp in ctx.``[DBO].[EMPLOYEES]`` do
-        select (emp.FIRST_NAME, emp.LAST_NAME)
+        select emp
     } |> Seq.toList
+
+//Ref issue #92
+let employeesFirstNameEmptyList = 
+    query {
+        for emp in ctx.``[DBO].[EMPLOYEES]`` do
+        where (emp.EMPLOYEE_ID > 10000)
+        select emp
+    } |> Seq.toList
+
+let regionsEmptyTable = 
+    query {
+        for r in ctx.``[DBO].[REGIONS]`` do
+        select r
+    } |> Seq.toList
+
+let tableWithNoKey = 
+    query {
+        for r in ctx.``[DBO].[TABLE_1]`` do
+        select r.COL
+    } |> Seq.toList
+
+let entity = ctx.``[DBO].[TABLE_1]``.Create()
+entity.COL <- 123uy
+ctx.SubmitUpdates()
 
 let salesNamedDavid = 
     query {
@@ -123,13 +147,13 @@ ctx.SubmitUpdates()
 
 //********************** Procedures **************************//
 
-ctx.Procedures.ADD_JOB_HISTORY(100, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60)
+ctx.Procedures.ADD_JOB_HISTORY.Invoke(100, DateTime(1993, 1, 13), DateTime(1998, 7, 24), "IT_PROG", 60)
 
 
 //Support for sprocs that return ref cursors
 let employees =
     [
-      for e in ctx.Procedures.GET_EMPLOYEES().Results.ResultSet do
+      for e in ctx.Procedures.GET_EMPLOYEES.Invoke().ResultSet do
         yield e.MapTo<Employee>()
     ]
 
@@ -141,7 +165,7 @@ type Region = {
 
 //Support for MARS procs
 let locations_and_regions =
-    let results = ctx.Procedures.GET_LOCATIONS_AND_REGIONS().Results
+    let results = ctx.Procedures.GET_LOCATIONS_AND_REGIONS.Invoke()
     printfn "%A" results.ColumnValues
     [
       for e in results.ResultSet do
@@ -154,25 +178,10 @@ let locations_and_regions =
 
 //Support for sprocs that return ref cursors and has in parameters
 let getemployees hireDate =
-    let results = (ctx.Procedures.GET_EMPLOYEES_STARTING_AFTER hireDate).Results
+    let results = (ctx.Procedures.GET_EMPLOYEES_STARTING_AFTER.Invoke hireDate)
     [
       for e in results.ResultSet do
         yield e.MapTo<Employee>()
     ]
 
 getemployees (new System.DateTime(1999,4,1))
-
-//********************** Functions ***************************//
-
-//[<Literal>]
-//let connStr = "Data Source=SQLSERVER;Initial Catalog=AdventureWorks;User Id=sa;Password=password"
-//[<Literal>]
-//let resolutionFolder = __SOURCE_DIRECTORY__
-//FSharp.Data.Sql.Common.QueryEvents.SqlQueryEvent |> Event.add (printfn "Executing SQL: %s")
-//
-//let processId = System.Diagnostics.Process.GetCurrentProcess().Id;
-//
-//type AW = SqlDataProvider<ConnectionString = connStr, DatabaseVendor = Common.DatabaseProviderTypes.MSSQLSERVER, ResolutionPath = resolutionFolder>
-//let ctx = AW.GetDataContext()
-//
-//ctx.Functions.UFNGETSTOCK(1).ReturnValue
